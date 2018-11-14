@@ -96,22 +96,6 @@ bool wantToEnter(){
     MPI_Send(&tmsg,1,mpi_token_msg,father,0,MPI_COMM_WORLD);
     father = NIL_PROCESS;
     req_msg+=1;
-    // Requesting = true;
-    // rn[world_rank] += 1;
-    // //Sending request message to all the other nodes
-    // for(int i = 1;i<world_size;i++){
-    //   if(i != world_rank){
-    //     double actionEnterTime = my_clock();
-    //     fprintf(outfile,"p%d sending request message to p%d at %lf\n",world_rank,i,actionEnterTime - start_time1);
-    //     fflush(outfile);
-    //     mss.isTerm = 0;
-    //     mss.priv_or_req = REQUEST;
-    //     mss.dest = world_rank;
-    //     mss.seq_num = rn[world_rank];
-    //     MPI_Send(&mss,1,mpi_msg,i,0,MPI_COMM_WORLD);
-    //     req_msg+=1;
-    //   }
-    // }
   }
   pthread_mutex_unlock(&m_sendrec);
 
@@ -141,43 +125,6 @@ bool wantToLeave(){
     next_process = NIL_PROCESS;
     priv_msg+=1;
   }
-
-
-  // ln[world_rank] = rn[world_rank];
-  // for(int i = 1;i<world_size;i++){
-  //   if(i != world_rank){
-  //     bool pa = false;
-  //     for(int k = 0;k<deq.size();k++){
-  //       if(deq[k] == i){pa = true;break;}
-  //     }
-  //     if(rn[i] == ln[i] + 1 && !pa){
-  //       deq.push_back(i);
-  //     }
-  //   }
-  // }
-  // if(!deq.empty()){
-  //   HavePrivilege = false;
-  //
-  //   // Sending privilege message to the head of the queue
-  //   mss.isTerm = 0;
-  //   mss.priv_or_req = PRIVILEDGE;
-  //   int hd = deq.front();
-  //   double actionEnterTime = my_clock();
-  //   fprintf(outfile,"p%d sending privilege message to p%d at %lf\n",world_rank,hd,actionEnterTime - start_time1);
-  //   fflush(outfile);
-  //   deq.pop_front();
-  //   mss.l = deq.size();
-  //   for(int i = 0;i<deq.size();i++){
-  //     mss.deq[i] = deq[i];
-  //   }
-  //   deq.clear();
-  //   for(int i = 0;i<11;i++){
-  //     mss.ln[i] = ln[i];
-  //   }
-  //   MPI_Send(&mss,1,mpi_msg,hd,0,MPI_COMM_WORLD);
-  //   priv_msg+=1;
-  // }
-  // Requesting = false;
   pthread_mutex_unlock(&m_sendrec);
 
 }
@@ -269,13 +216,6 @@ void receive(){
 
 
       pthread_mutex_lock(&m_sendrec);
-      // for(int i = 0;i<message.l;i++){
-      //   deq.push_back(message.deq[i]);
-      // }
-      // for(int i = 0;i<11;i++){
-      //   ln[i] = message.ln[i];
-      // }
-      // HavePrivilege = true;
       token_present = true;
       pthread_mutex_unlock(&m_sendrec);
 
@@ -316,29 +256,6 @@ void receive(){
         req_msg+=1;
       }
       father = message.reqProcess;
-
-
-      // j =message.dest;
-      // rn[j] = max(rn[j],message.seq_num);
-      // if(HavePrivilege && ! Requesting && rn[j] == ln[j]+1){
-      //   double actionEnterTime = my_clock();
-      //   fprintf(outfile,"p%d sending privilege message to p%d at %lf\n",world_rank,j,actionEnterTime - start_time1);
-      //   fflush(outfile);
-      //   HavePrivilege = false;
-      //   mss.isTerm = 0;
-      //   mss.priv_or_req = PRIVILEDGE;
-      //
-      //   mss.l = deq.size();
-      //   for(int i = 0;i<deq.size();i++){
-      //     mss.deq[i] = deq[i];
-      //   }
-      //   deq.clear();
-      //   for(int i = 0;i<11;i++){
-      //     mss.ln[i] = ln[i];
-      //   }
-      //   MPI_Send(&mss,1,mpi_msg,j,0,MPI_COMM_WORLD);
-      //   priv_msg+=1;
-      // }
       pthread_mutex_unlock(&m_sendrec);
     }
   }
@@ -439,16 +356,6 @@ int main(){
         father = NIL_PROCESS;
 
       cout<<"Process "<<world_rank<<": "<<father<<endl;
-      // if(world_rank == idx){
-      //   HavePrivilege = true;
-      // }
-      // else{
-      //   HavePrivilege = false;
-      // }
-      // Requesting = false;
-      // memset(ln,-1,sizeof(ln));
-      // memset(rn,-1,sizeof(rn));
-
       // create two threads, one for working and other being receive thread
       start_time1 = my_clock();
       thread working = thread(work);
