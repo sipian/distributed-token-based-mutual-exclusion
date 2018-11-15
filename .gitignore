@@ -34,6 +34,6 @@
 # Compiled Executeables
 helary
 
-# Output files
-output.txt
+# txt files
+*.txt
 

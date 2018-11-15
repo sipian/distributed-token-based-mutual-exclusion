@@ -107,12 +107,13 @@ void receiveMessage(const int myID, const int myPort, int &inCS, int &tokenHere,
     struct sockaddr_in client;
     socklen_t len = sizeof(struct sockaddr_in);
 
-    char recvBuffer[std::max(sizeof(RequestMessage),sizeof(Token))];
+    int maxRecvBufferLen = std::max(sizeof(RequestMessage),sizeof(Token));
+    char recvBuffer[maxRecvBufferLen];
 
     Token token;
 
     Time now;
-    int clientId;
+    int clientSockfd;
     long long int sysTime;
 
     int sockfd = createReceiveSocket(myID, myPort);
@@ -120,10 +121,10 @@ void receiveMessage(const int myID, const int myPort, int &inCS, int &tokenHere,
     printf("INFO :: Node %d: receiveMessage -> Started listening for connections\n", myID);
     while (true)
     {
-        if ((clientId = accept(sockfd, (struct sockaddr *)&client, &len)) >= 0)
+        if ((clientSockfd = accept(sockfd, (struct sockaddr *)&client, &len)) >= 0)
         {
             // receiving message from client
-            int data_len = recv(clientId, recvBuffer, sizeof(RequestMessage) + sizeof(Token), 0);
+            int data_len = recv(clientSockfd, recvBuffer, maxRecvBufferLen, 0);
             if (data_len > 0)
             {
                 now = std::chrono::system_clock::now();
@@ -168,6 +169,7 @@ void receiveMessage(const int myID, const int myPort, int &inCS, int &tokenHere,
                     printf("ERROR :: Node %d: receiveMessage -> Invalid Message Type %d\n", myID, msgType);
                 }
             }
+            close(clientSockfd);
         }
     }
     sysTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start).count();
@@ -292,6 +294,12 @@ int main(int argc, char *argv[])
     float alpha, beta;
 
     fin >> numNodes >> mutualExclusionCounts >> initialTokenNode >> alpha >> beta;
+
+    if (numNodes > MAX_NODES) {
+        std::cout << "\033[1;31mERROR :: Number of Nodes > MAX_NODES (" << MAX_NODES << ")\033[0m\n";
+        exit(EXIT_FAILURE);
+
+    }
 
     std::string list;
     std::vector<std::vector<int>> topology(numNodes, std::vector<int>(0));
