@@ -8,7 +8,7 @@
 int startPort;
 
 typedef std::chrono::time_point<std::chrono::system_clock> Time;
-typedef unsigned long long int ULLONG_MAX;
+typedef long long int LLONG;
 
 enum messageType
 {
@@ -22,7 +22,7 @@ typedef struct RequestMessage
     enum messageType type;
     int senderID;
     int reqOriginId;
-    ULLONG_MAX reqTime;
+    LLONG reqTime;
     char alreadySeen[MAX_LENGTH]; // process-identifiers delimited by comma
 } RequestMessage;
 
@@ -31,7 +31,7 @@ typedef struct Token
     enum messageType type;
     int senderID;
     int elecID;                // destination ID
-    ULLONG_MAX lud[MAX_NODES]; // array of nodes logical clock
+    LLONG lud[MAX_NODES]; // array of nodes logical clock
 } Token;
 
 typedef struct TerminateMessage
@@ -43,11 +43,7 @@ typedef struct TerminateMessage
 typedef struct RequestID
 {
     int reqOriginId;
-    ULLONG_MAX reqTime;
+    LLONG reqTime;
 } RequestID;
 
-typedef struct RequestArrayNode
-{
-    int neighborID;
-    std::list<RequestID> requests;
-} RequestArrayNode;
+typedef std::list<RequestID> RequestArrayNode;

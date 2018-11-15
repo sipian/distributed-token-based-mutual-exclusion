@@ -23,7 +23,7 @@
  * @param fp 
  * @param lock 
  */
-void working(const int myID, int &inCS, int &tokenHere, ULLONG_MAX &logicalClock, std::vector<RequestArrayNode> &reqArray,
+void working(const int myID, int &inCS, int &tokenHere, LLONG &logicalClock, std::map<int, RequestArrayNode> &reqArray,
              std::vector<int> &neighbors, Token **sharedTokenPtrPtr, const int numNodes,
              int mutualExclusionCounts, float alpha, float beta, const Time &start, FILE *fp, std::mutex *lock)
 {
@@ -67,6 +67,22 @@ void working(const int myID, int &inCS, int &tokenHere, ULLONG_MAX &logicalClock
     sysTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start).count();
     fprintf(fp, "%d completed all %d transactions at %lld\n", myID, mutualExclusionCounts, sysTime);
     fflush(fp);
+
+    while (true)
+    {
+        lock->lock();
+        if (tokenHere == TRUE)
+        {
+            lock->unlock();
+            exitCS(myID, inCS, tokenHere, logicalClock, reqArray, sharedTokenPtrPtr, numNodes, start, fp, lock);
+        }
+        else
+        {
+            lock->unlock();            
+        }
+        // this_thread::sleep_for(chrono::milliseconds(10));
+    }
+
 }
 
 /**
@@ -85,15 +101,14 @@ void working(const int myID, int &inCS, int &tokenHere, ULLONG_MAX &logicalClock
  * @param fp 
  * @param lock 
  */
-void receiveMessage(const int myID, const int myPort, int &inCS, int &tokenHere, ULLONG_MAX &logicalClock, std::vector<RequestArrayNode> &reqArray,
+void receiveMessage(const int myID, const int myPort, int &inCS, int &tokenHere, LLONG &logicalClock, std::map<int, RequestArrayNode> &reqArray,
                     std::vector<int> &neighbors, Token **sharedTokenPtrPtr, const int numNodes, const Time &start, FILE *fp, std::mutex *lock)
 {
     struct sockaddr_in client;
     socklen_t len = sizeof(struct sockaddr_in);
 
-    char recvBuffer[sizeof(RequestMessage) + sizeof(Token)];
+    char recvBuffer[std::max(sizeof(RequestMessage),sizeof(Token))];
 
-    RequestMessage request;
     Token token;
 
     Time now;
@@ -139,14 +154,12 @@ void receiveMessage(const int myID, const int myPort, int &inCS, int &tokenHere,
 
                 case REQUEST:
                     sysTime = std::chrono::duration_cast<std::chrono::microseconds>(now - start).count();
-                    fprintf(fp, "%d received REQUEST from %d at %lld\n", myID, requestMessage->senderID, sysTime);
+                    fprintf(fp, "%d received REQUEST from %d with alreadySeen as |%s| at %lld\n", myID, requestMessage->senderID, requestMessage->alreadySeen, sysTime);
                     fflush(fp);
-
-                    request = *requestMessage;
 
                     lock->lock();
 
-                    receiveRequest(myID, inCS, tokenHere, logicalClock, reqArray, request, neighbors, sharedTokenPtrPtr, numNodes, start, fp);
+                    receiveRequest(myID, inCS, tokenHere, logicalClock, reqArray, requestMessage, neighbors, sharedTokenPtrPtr, numNodes, start, fp);
 
                     lock->unlock();
                     break;
@@ -178,9 +191,9 @@ void run(int numNodes, int mutualExclusionCounts, int initialTokenNode, float al
     std::vector<int> tokenHere(numNodes, FALSE);
     tokenHere[initialTokenNode] = TRUE;
 
-    std::vector<ULLONG_MAX> logicalClock(numNodes, 0);
+    std::vector<LLONG> logicalClock(numNodes, 0);
 
-    std::vector<std::vector<RequestArrayNode>> reqArray(numNodes);
+    std::vector<std::map<int, RequestArrayNode> > reqArray(numNodes);
     std::vector<Token **> sharedTokenPtrPtr(numNodes, NULL);
     std::vector<Token *> sharedTokenPtr(numNodes, NULL);
 
@@ -190,9 +203,7 @@ void run(int numNodes, int mutualExclusionCounts, int initialTokenNode, float al
 
         for (int &nbr : topology[i])
         {
-            reqArray[i].push_back(RequestArrayNode{
-                nbr,
-                std::list<RequestID>(0)});
+            reqArray[i][nbr] = std::list<RequestID>(0);
         }
     }
 
@@ -201,6 +212,7 @@ void run(int numNodes, int mutualExclusionCounts, int initialTokenNode, float al
     Token tokenObj;
     tokenObj.senderID = initialTokenNode;
     tokenObj.type = messageType::TOKEN;
+    tokenObj.elecID = initialTokenNode;
 
     for (int i = 0; i < MAX_NODES; i++)
     {
@@ -301,7 +313,6 @@ int main(int argc, char *argv[])
                 }
                 // construct adjacency list
                 topology[nodeID].push_back(std::stoi(word));
-                topology[std::stoi(word)].push_back(nodeID);
             }
         }
     }

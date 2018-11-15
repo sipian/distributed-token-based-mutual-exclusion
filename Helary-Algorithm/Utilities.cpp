@@ -114,15 +114,15 @@ bool sendMessage(const int myID, const int dstID, const T &message)
  * @param elecID 
  * @return int neighbor ID from whom we received the request
  */
-int getNeighborIDfromReqArray(const int myID, const int elecID, std::vector<RequestArrayNode> &reqArray)
+int getNeighborIDfromReqArray(const int myID, const int elecID, std::map<int, RequestArrayNode> &reqArray)
 {
     for (auto &nbr : reqArray)
     {
-        for (auto it = nbr.requests.begin(); it != nbr.requests.end(); it++)
+        for (auto it = nbr.second.begin(); it != nbr.second.end(); it++)
         {
             if (it->reqOriginId == elecID)
             {
-                return nbr.neighborID;
+                return nbr.first;
             }
         }
     }
@@ -145,9 +145,9 @@ std::string getLudFromToken(const int numNodes, Token **sharedTokenPtrPtr)
     std::string res = "";
     for (int i = 0; i < numNodes; i++)
     {
-        res += (*sharedTokenPtrPtr)->lud[i] + ",";
+        res += std::to_string((*sharedTokenPtrPtr)->lud[i]) + ",";
     }
-    return res;
+    return (res.size() > 0)?res.substr(0, res.size()-1):res;    //removing trailing comma if any
 }
 
 /* Request Message Utility Functions */

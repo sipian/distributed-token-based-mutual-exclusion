@@ -1,3 +1,4 @@
+#include <map>
 #include <mutex>
 #include <algorithm>
 
@@ -15,7 +16,7 @@
  * @param start for logging purposes
  * @param fp file pointer for saving the logs
  */
-void transmitToken(const int myID, int &tokenHere, ULLONG_MAX &logicalClock, std::vector<RequestArrayNode> &reqArray,
+void transmitToken(const int myID, int &tokenHere, LLONG &logicalClock, std::map<int, RequestArrayNode> &reqArray,
                    Token **sharedTokenPtrPtr, const int numNodes, const Time &start, FILE *fp)
 {
     if (*sharedTokenPtrPtr == NULL)
@@ -25,26 +26,24 @@ void transmitToken(const int myID, int &tokenHere, ULLONG_MAX &logicalClock, std
     }
 
     // Compute the minimum val of the processes owning a pending request then find the oldest and send it the token.
-    ULLONG_MAX minRequestTime = 0;
+    LLONG minRequestTime = 0;
     int minRequestID = -1;
     int minNbrVal;
-    int minNbrIndex;
     std::list<RequestID>::iterator minRequestNodeIterator;
 
-    for (int i = 0; i < reqArray.size(); i++)
+    for (auto &i : reqArray)
     {
-        for (auto it = reqArray[i].requests.begin(); it != reqArray[i].requests.end(); it++)
+        for (auto it = i.second.begin(); it != i.second.end(); it++)
         {
             // finding minimum request from totally ordered reqArray
 
-            if ((*sharedTokenPtrPtr)->lud[it->reqOriginId] < it->reqTime)
+            if ((*sharedTokenPtrPtr)->lud[it->reqOriginId] < 0 || (*sharedTokenPtrPtr)->lud[it->reqOriginId] < it->reqTime)
             {
                 if (minRequestID == -1)
                 { // first time this condition is true
                     minRequestTime = it->reqTime;
                     minRequestID = it->reqOriginId;
-                    minNbrIndex = i;
-                    minNbrVal = reqArray[i].neighborID;
+                    minNbrVal = i.first;
                     minRequestNodeIterator = it;
                 }
                 else
@@ -54,8 +53,7 @@ void transmitToken(const int myID, int &tokenHere, ULLONG_MAX &logicalClock, std
                     {
                         minRequestTime = it->reqTime;
                         minRequestID = it->reqOriginId;
-                        minNbrIndex = i;
-                        minNbrVal = reqArray[i].neighborID;
+                        minNbrVal = i.first;
                         minRequestNodeIterator = it;
                     }
                     else if (it->reqTime == minRequestTime)
@@ -64,8 +62,7 @@ void transmitToken(const int myID, int &tokenHere, ULLONG_MAX &logicalClock, std
                         {
                             minRequestTime = it->reqTime;
                             minRequestID = it->reqOriginId;
-                            minNbrIndex = i;
-                            minNbrVal = reqArray[i].neighborID;
+                            minNbrVal = i.first;
                             minRequestNodeIterator = it;
                         }
                     }
@@ -73,10 +70,11 @@ void transmitToken(const int myID, int &tokenHere, ULLONG_MAX &logicalClock, std
             }
         }
     }
+
     if (minRequestID != -1)
     {
         // remove pending request from request Array
-        reqArray[minNbrIndex].requests.erase(minRequestNodeIterator);
+        reqArray[minNbrVal].erase(minRequestNodeIterator);
 
         // update token fields
         (*sharedTokenPtrPtr)->type = messageType::TOKEN;
@@ -92,7 +90,7 @@ void transmitToken(const int myID, int &tokenHere, ULLONG_MAX &logicalClock, std
         fprintf(fp, "%d sends TOKEN to neighbor %d for %d with lud |%s| at %lld\n", myID, minNbrVal, minRequestID, getLudFromToken(numNodes, sharedTokenPtrPtr).c_str(), sysTime);
         fflush(fp);
 
-        if (sendMessage(myID, minNbrVal, **sharedTokenPtrPtr))
+        if (sendMessage(myID, minNbrVal, **sharedTokenPtrPtr) == false)
         {
             printf("ERROR :: Node %d: transmitToken -> Unable to send TOKEN to %d\n", myID, minNbrVal);
             exit(EXIT_FAILURE);
@@ -116,10 +114,11 @@ void transmitToken(const int myID, int &tokenHere, ULLONG_MAX &logicalClock, std
  * @param fp file pointer for saving the logs
  * @param lock mutex lock for the variables shared with the receiver thread
  */
-void receiveToken(const int myID, int &inCS, int &tokenHere, std::vector<RequestArrayNode> &reqArray,
+void receiveToken(const int myID, int &inCS, int &tokenHere, std::map<int, RequestArrayNode> &reqArray,
                   Token **sharedTokenPtrPtr, const int numNodes, const Time &start, FILE *fp)
 {
-    tokenHere = true;
+
+    tokenHere = TRUE;
 
     if ((*sharedTokenPtrPtr)->elecID == myID)
     {
@@ -133,17 +132,19 @@ void receiveToken(const int myID, int &inCS, int &tokenHere, std::vector<Request
         // update token fields
         (*sharedTokenPtrPtr)->type = messageType::TOKEN;
         (*sharedTokenPtrPtr)->senderID = myID;
-        tokenHere = false;
+        tokenHere = FALSE;
 
         printf("INFO :: Node %d: receiveToken -> Sending Token for %d to neighbor %d\n", myID, (*sharedTokenPtrPtr)->elecID, nbrVal);
         long long int sysTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start).count();
         fprintf(fp, "%d sends TOKEN to neighbor %d for %d with lud |%s| at %lld\n", myID, nbrVal, (*sharedTokenPtrPtr)->elecID, getLudFromToken(numNodes, sharedTokenPtrPtr).c_str(), sysTime);
         fflush(fp);
-        if (sendMessage(myID, nbrVal, **sharedTokenPtrPtr))
+        if (sendMessage(myID, nbrVal, **sharedTokenPtrPtr) == false)
         {
             printf("ERROR :: Node %d: receiveToken -> Unable to send TOKEN for %d to neighbor %d\n", myID, (*sharedTokenPtrPtr)->elecID, nbrVal);
             exit(EXIT_FAILURE);
         }
+
+        // removing the token
         *sharedTokenPtrPtr = NULL;
     }
 }
@@ -164,21 +165,22 @@ void receiveToken(const int myID, int &inCS, int &tokenHere, std::vector<Request
  * @param fp 
  * @param lock 
  */
-void receiveRequest(const int myID, int &inCS, int &tokenHere, ULLONG_MAX &logicalClock, std::vector<RequestArrayNode> &reqArray, RequestMessage &request,
+void receiveRequest(const int myID, int &inCS, int &tokenHere, LLONG &logicalClock, std::map<int, RequestArrayNode> &reqArray, RequestMessage *request,
                     std::vector<int> &neighbors, Token **sharedTokenPtrPtr, const int numNodes, const Time &start, FILE *fp)
 {
     bool isRequestAlreadyPresent = false;
 
     for (auto &nbr : reqArray)
     {
-        auto it = nbr.requests.begin();
-        while (it != nbr.requests.end())
+        std::list<RequestID>::iterator it = nbr.second.begin();
+        while (it != nbr.second.end())
         {
-            if (it->reqOriginId == request.reqOriginId)
+            if (it->reqOriginId == request->reqOriginId)
             {
-                if (it->reqTime < request.reqTime)
+                if (it->reqTime < request->reqTime)
                 {
-                    nbr.requests.erase(it); //Delete a old request
+                    nbr.second.erase(it++);         //Delete an old request
+                    continue;
                 }
                 else
                 {
@@ -192,31 +194,31 @@ void receiveRequest(const int myID, int &inCS, int &tokenHere, ULLONG_MAX &logic
     if (!isRequestAlreadyPresent)
     {
         //The request just received is a new one and is the youngest that the process ever received from requesting process
-        logicalClock = std::max(logicalClock, request.reqTime) + 1;
-        reqArray[request.senderID].requests.push_back(RequestID{
-            request.reqOriginId,
-            request.reqTime});
+        logicalClock = std::max(logicalClock, request->reqTime) + 1;
+        reqArray[request->senderID].push_back(RequestID{
+            request->reqOriginId,
+            request->reqTime});
 
-        std::vector<int> alreadySeen = extractProcessIDFromAlreadySeen(request.alreadySeen);
+        std::vector<int> alreadySeen = extractProcessIDFromAlreadySeen(request->alreadySeen);
 
-        request.senderID = myID;
-        strcpy(request.alreadySeen, unionAlreadySeenNeighbors(alreadySeen, neighbors).c_str());
+        request->senderID = myID;
+        strcpy(request->alreadySeen, unionAlreadySeenNeighbors(alreadySeen, neighbors).c_str());
 
         for (const int nbr : neighbors)
         {
             if (find(alreadySeen.begin(), alreadySeen.end(), nbr) == alreadySeen.end())
             {
                 long long int sysTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start).count();
-                fprintf(fp, "%d sends REQUEST to %d for %d at %lld\n", myID, nbr, request.reqOriginId, sysTime);
+                fprintf(fp, "%d sends REQUEST to %d for %d at %lld\n", myID, nbr, request->reqOriginId, sysTime);
                 fflush(fp);
-                if (sendMessage(myID, nbr, request) == false)
+                if (sendMessage(myID, nbr, *request) == false)
                 {
-                    printf("ERROR :: Node %d: receiveRequest -> Unable to send REQUEST to %d for %d\n", myID, nbr, request.reqOriginId);
+                    printf("ERROR :: Node %d: receiveRequest -> Unable to send REQUEST to %d for %d\n", myID, nbr, request->reqOriginId);
                     exit(EXIT_FAILURE);
                 }
             }
         }
-        if (tokenHere && !inCS)
+        if (tokenHere == TRUE && inCS == FALSE)
         {
             transmitToken(myID, tokenHere, logicalClock, reqArray, sharedTokenPtrPtr, numNodes, start, fp);
         }
@@ -235,7 +237,7 @@ void receiveRequest(const int myID, int &inCS, int &tokenHere, ULLONG_MAX &logic
  * @param fp file pointer for saving the logs
  * @param lock mutex lock for the variables shared with the receiver thread
  */
-void requestCS(const int myID, int &inCS, int &tokenHere, ULLONG_MAX &logicalClock,
+void requestCS(const int myID, int &inCS, int &tokenHere, LLONG &logicalClock,
                std::vector<int> &neighbors, const Time &start, FILE *fp, std::mutex *lock)
 {
     lock->lock();
@@ -281,7 +283,7 @@ void requestCS(const int myID, int &inCS, int &tokenHere, ULLONG_MAX &logicalClo
             break;
         }
         lock->unlock();
-        // this_thread::sleep_for(std::chrono::milliseconds(10));
+        // std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
 
@@ -299,7 +301,7 @@ void requestCS(const int myID, int &inCS, int &tokenHere, ULLONG_MAX &logicalClo
  * @param fp file pointer for saving the logs
  * @param lock mutex lock for the variables shared with the receiver thread
  */
-void exitCS(const int myID, int &inCS, int &tokenHere, ULLONG_MAX &logicalClock, std::vector<RequestArrayNode> &reqArray,
+void exitCS(const int myID, int &inCS, int &tokenHere, LLONG &logicalClock, std::map<int, RequestArrayNode> &reqArray,
             Token **sharedTokenPtrPtr, const int numNodes, const Time &start, FILE *fp, std::mutex *lock)
 {
     lock->lock();
