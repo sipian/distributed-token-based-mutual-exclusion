@@ -22,12 +22,6 @@
 #include <unistd.h>
 using namespace std;
 
-
-struct rep {
-  double enterTime;
-  int num_msgs;
-};
-
 typedef chrono::time_point<chrono::system_clock> Time;
 
 enum messageType{
@@ -42,55 +36,15 @@ typedef struct Message{
   int reqProcess;
 } Message1;
 
-struct msg {
-  int isTerm;
-  int priv_or_req;
-  int dest;
-  int seq_num;
-  int l;
-  int deq[15];
-  int ln[11];
-};
-
-//
+// Useful meta variables
 #define MAX_NODES 30
 #define FALSE 0
 #define TRUE 1
-
-// Useful message differentiators
 #define NIL_PROCESS -1
-#define TIMEOUT_TIME 20
-
-// Some handy global variables
-int idx,t;
-int world_rank,world_size;
-vector<int> arr[11],spantree[11];
-int ln[11], rn[11];
-double start_time1,end_time1,enterTime;
-double lambda1,lambda2;
-int termCount,priv_msg,req_msg;
-bool HavePrivilege, Requesting;
-int j,n_seq;
-struct msg mss;
-struct rep report;
-deque<int> deq;
-//Specific to Naimi's algorithm
-int father;
-int next_process;
-bool request_cs,token_present;
 
 int startPort;
 std::atomic<int> totalReceivedMessages = ATOMIC_VAR_INIT(0);
 std::atomic<long long int> totalResponseTime = ATOMIC_VAR_INIT(0);
-
-
-//Utility for time measurement
-double my_clock(void) {
-  struct timeval t;
-  gettimeofday(&t, NULL);
-  return (1.0e-6*t.tv_usec + t.tv_sec);
-}
-
 
 int createReceiveSocket(int myID, int myPort){
   printf("INFO :: Node %d: createReceiveSocket -> Creating Socket %hu\n", myID, myPort);
@@ -193,7 +147,6 @@ bool wantToEnter(int myID, int &request_cs, int &next_process, int &father, int 
         exit(1);
     }
     father = NIL_PROCESS;
-    req_msg+=1;
   }
   pthread_mutex_unlock(m_sendrec);
 
@@ -222,7 +175,6 @@ bool wantToLeave(int myID, int &request_cs, int &next_process, int &father, int 
     }
     token_present = FALSE;
     next_process = NIL_PROCESS;
-    priv_msg+=1;
   }
   pthread_mutex_unlock(m_sendrec);
 
@@ -279,6 +231,9 @@ void work(int myID, int &father, int &next_process, int &request_cs, int &token_
   fprintf(outfile, "%d completed all %d transactions at %lld\n", myID, mutexCounts, sysTime);
   fflush(outfile);
 
+
+
+  // Initiating the terimation part of the process, inform all the nodes about this
   for(int i = 0;i<noOfNodes;i++){
     if(i != myID){
       sysTime = chrono::duration_cast<chrono::microseconds>(chrono::system_clock::now() - start).count();
@@ -291,10 +246,12 @@ void work(int myID, int &father, int &next_process, int &request_cs, int &token_
       }
     }
   }
+
   pthread_mutex_lock(m_sendrec);
   finishedProcessesCount += 1;
   pthread_mutex_unlock(m_sendrec);
 
+  // Wait till we get messages from all other processes
   while(finishedProcessesCount < noOfNodes);
   sysTime = chrono::duration_cast<chrono::microseconds>(chrono::system_clock::now() - start).count();
   fprintf(outfile, "%d finished any pending transactions at %lld\n", myID, sysTime);
@@ -358,7 +315,6 @@ void receive(int myID, int myPort, int noOfNodes, int &father, int &next_process
                     printf("ERROR :: Node %d: working -> Could not send PRIVILEDGE to %d\n", myID, send_process);
                     exit(EXIT_FAILURE);
                 }
-                priv_msg += 1;
               }
             }
             else{
@@ -370,7 +326,6 @@ void receive(int myID, int myPort, int noOfNodes, int &father, int &next_process
                   printf("ERROR :: Node %d: working -> Could not send REQUEST to %d\n", myID, father);
                   exit(EXIT_FAILURE);
               }
-              req_msg+=1;
             }
             father = message.reqProcess;
             pthread_mutex_unlock(m_sendrec);
