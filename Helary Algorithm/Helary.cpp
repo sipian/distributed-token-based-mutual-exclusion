@@ -165,7 +165,7 @@ void receiveToken(const int myID, int &inCS, int &tokenHere, std::vector<Request
  * @param lock 
  */
 void receiveRequest(const int myID, int &inCS, int &tokenHere, ULLONG_MAX &logicalClock, std::vector<RequestArrayNode> &reqArray, RequestMessage &request,
-                    const std::vector<const int> &neighbors, Token **sharedTokenPtrPtr, const int numNodes, const Time &start, FILE *fp)
+                    std::vector<int> &neighbors, Token **sharedTokenPtrPtr, const int numNodes, const Time &start, FILE *fp)
 {
     bool isRequestAlreadyPresent = false;
 
@@ -236,7 +236,7 @@ void receiveRequest(const int myID, int &inCS, int &tokenHere, ULLONG_MAX &logic
  * @param lock mutex lock for the variables shared with the receiver thread
  */
 void requestCS(const int myID, int &inCS, int &tokenHere, ULLONG_MAX &logicalClock,
-               const std::vector<const int> &neighbors, const Time &start, FILE *fp, std::mutex *lock)
+               std::vector<int> &neighbors, const Time &start, FILE *fp, std::mutex *lock)
 {
     lock->lock();
 

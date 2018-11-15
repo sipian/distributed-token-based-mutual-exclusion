@@ -184,7 +184,7 @@ std::vector<int> extractProcessIDFromAlreadySeen(char Q[])
  * @param neighbors 
  * @return string message in format alreadySeen1,alreadySeen2,alreadySeen3,...,neighbors1,neighbors2,neighbors3...neighbors_m
  */
-std::string unionAlreadySeenNeighbors(std::vector<int> alreadySeen, const std::vector<const int> &neighbors)
+std::string unionAlreadySeenNeighbors(std::vector<int> alreadySeen, std::vector<int> &neighbors)
 {
     std::set<int> s;
     for (int i : alreadySeen)
@@ -211,7 +211,7 @@ std::string unionAlreadySeenNeighbors(std::vector<int> alreadySeen, const std::v
  * @param neighbors 
  * @return string message in format neighbors1,neighbors2,neighbors3,...,myID
  */
-std::string constructAlreadySeenString(const int myID, const std::vector<const int> &neighbors)
+std::string constructAlreadySeenString(const int myID, std::vector<int> &neighbors)
 {
     std::string s = "";
     for (const int nbr : neighbors)

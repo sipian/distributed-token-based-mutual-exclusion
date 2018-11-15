@@ -24,7 +24,7 @@
  * @param lock 
  */
 void working(const int myID, int &inCS, int &tokenHere, ULLONG_MAX &logicalClock, std::vector<RequestArrayNode> &reqArray,
-             const std::vector<const int> &neighbors, Token **sharedTokenPtrPtr, const int numNodes,
+             std::vector<int> &neighbors, Token **sharedTokenPtrPtr, const int numNodes,
              int mutualExclusionCounts, float alpha, float beta, const Time &start, FILE *fp, std::mutex *lock)
 {
     std::default_random_engine generatorLocalComputation;
@@ -86,7 +86,7 @@ void working(const int myID, int &inCS, int &tokenHere, ULLONG_MAX &logicalClock
  * @param lock 
  */
 void receiveMessage(const int myID, const int myPort, int &inCS, int &tokenHere, ULLONG_MAX &logicalClock, std::vector<RequestArrayNode> &reqArray,
-                    const std::vector<const int> &neighbors, Token **sharedTokenPtrPtr, const int numNodes, const Time &start, FILE *fp, std::mutex *lock)
+                    std::vector<int> &neighbors, Token **sharedTokenPtrPtr, const int numNodes, const Time &start, FILE *fp, std::mutex *lock)
 {
     struct sockaddr_in client;
     socklen_t len = sizeof(struct sockaddr_in);
