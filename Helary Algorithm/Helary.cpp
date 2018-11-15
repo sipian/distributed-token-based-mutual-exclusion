@@ -223,7 +223,6 @@ void receiveRequest(const int myID, int &inCS, int &tokenHere, ULLONG_MAX &logic
     }
 }
 
-
 /**
  * @brief is called when a process wants to enter the CS
  * 
