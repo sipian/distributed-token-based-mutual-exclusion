@@ -1,3 +1,4 @@
+#include <atomic>
 #include <thread>
 #include <random>
 #include <fstream>
@@ -23,8 +24,12 @@
  * @param fp 
  * @param lock 
  */
+
+std::atomic<int> totalReceivedMessages = ATOMIC_VAR_INIT(0);
+std::atomic<long long int> totalResponseTime = ATOMIC_VAR_INIT(0);
+
 void working(const int myID, int &inCS, int &tokenHere, LLONG &logicalClock, std::map<int, RequestArrayNode> &reqArray,
-             std::vector<int> &neighbors, Token **sharedTokenPtrPtr, const int numNodes,
+             std::vector<int> &neighbors, Token **sharedTokenPtrPtr, const int numNodes, std::atomic<int> &finishedProcessesCount,
              int mutualExclusionCounts, float alpha, float beta, const Time &start, FILE *fp, std::mutex *lock)
 {
     std::default_random_engine generatorLocalComputation;
@@ -53,6 +58,7 @@ void working(const int myID, int &inCS, int &tokenHere, LLONG &logicalClock, std
 
         requestCSTime = std::chrono::system_clock::now();
         requestCS(myID, inCS, tokenHere, logicalClock, neighbors, start, fp, lock);
+        totalResponseTime += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - requestCSTime).count();
 
         sysTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start).count();
         fprintf(fp, "%d ENTERS CS for the %dst time at %lld\n", myID, i, sysTime);
@@ -68,7 +74,31 @@ void working(const int myID, int &inCS, int &tokenHere, LLONG &logicalClock, std
     fprintf(fp, "%d completed all %d transactions at %lld\n", myID, mutualExclusionCounts, sysTime);
     fflush(fp);
 
-    while (true)
+    // node is alive as long as all processes have finished
+    // other nodes might need routing of privilege across completed nodes
+
+    // informing all other nodes of termination
+    TerminateMessage terminateMessage;
+    terminateMessage.senderID = myID;
+    terminateMessage.type = TERMINATE;
+
+    for(int i = 0; i < numNodes; i++)
+    {
+        if(i != myID) 
+        {
+            sysTime = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start).count();
+            fprintf(fp, "%d sends TERMINATE to %d at %lld\n", myID, i, sysTime);
+            fflush(fp);
+            if (sendMessage(myID, i, terminateMessage) == false)
+            {
+                printf("ERROR :: Node %d: working -> Could not send TERMINATE to %d\n", myID, i);
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+
+    finishedProcessesCount++;
+    while (finishedProcessesCount < numNodes)
     {
         lock->lock();
         if (tokenHere == TRUE)
@@ -82,7 +112,9 @@ void working(const int myID, int &inCS, int &tokenHere, LLONG &logicalClock, std
         }
         // this_thread::sleep_for(chrono::milliseconds(10));
     }
-
+    sysTime =std:: chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start).count();
+    fprintf(fp, "%d finished any pending transactions at %lld\n", myID, sysTime);
+    fflush(fp);
 }
 
 /**
@@ -101,8 +133,10 @@ void working(const int myID, int &inCS, int &tokenHere, LLONG &logicalClock, std
  * @param fp 
  * @param lock 
  */
-void receiveMessage(const int myID, const int myPort, int &inCS, int &tokenHere, LLONG &logicalClock, std::map<int, RequestArrayNode> &reqArray,
-                    std::vector<int> &neighbors, Token **sharedTokenPtrPtr, const int numNodes, const Time &start, FILE *fp, std::mutex *lock)
+void receiveMessage(const int myID, const int myPort, int &inCS, int &tokenHere, LLONG &logicalClock, 
+                    std::map<int, RequestArrayNode> &reqArray, std::atomic<int> &finishedProcessesCount,
+                    std::vector<int> &neighbors, Token **sharedTokenPtrPtr,
+                    const int numNodes, const Time &start, FILE *fp, std::mutex *lock)
 {
     struct sockaddr_in client;
     socklen_t len = sizeof(struct sockaddr_in);
@@ -115,11 +149,12 @@ void receiveMessage(const int myID, const int myPort, int &inCS, int &tokenHere,
     Time now;
     int clientSockfd;
     long long int sysTime;
+    long long int receivedTokenMessages = 0, receivedRequestMessages = 0;
 
     int sockfd = createReceiveSocket(myID, myPort);
 
     printf("INFO :: Node %d: receiveMessage -> Started listening for connections\n", myID);
-    while (true)
+    while (finishedProcessesCount < numNodes)
     {
         if ((clientSockfd = accept(sockfd, (struct sockaddr *)&client, &len)) >= 0)
         {
@@ -132,12 +167,14 @@ void receiveMessage(const int myID, const int myPort, int &inCS, int &tokenHere,
                 // determining message type
                 RequestMessage *requestMessage = reinterpret_cast<RequestMessage *>(recvBuffer);
                 Token *tokenMessage = reinterpret_cast<Token *>(recvBuffer);
+                TerminateMessage* terminateMessage = reinterpret_cast<TerminateMessage *>(recvBuffer);
 
                 int msgType = tokenMessage->type;
 
                 switch (msgType)
                 {
                 case TOKEN:
+                    totalReceivedMessages++;
                     sysTime = std::chrono::duration_cast<std::chrono::microseconds>(now - start).count();
                     fprintf(fp, "%d receives TOKEN from %d at %lld\n", myID, tokenMessage->senderID, sysTime);
                     fflush(fp);
@@ -154,6 +191,7 @@ void receiveMessage(const int myID, const int myPort, int &inCS, int &tokenHere,
                     break;
 
                 case REQUEST:
+                    totalReceivedMessages++;
                     sysTime = std::chrono::duration_cast<std::chrono::microseconds>(now - start).count();
                     fprintf(fp, "%d received REQUEST from %d with alreadySeen as |%s| at %lld\n", myID, requestMessage->senderID, requestMessage->alreadySeen, sysTime);
                     fflush(fp);
@@ -163,6 +201,13 @@ void receiveMessage(const int myID, const int myPort, int &inCS, int &tokenHere,
                     receiveRequest(myID, inCS, tokenHere, logicalClock, reqArray, requestMessage, neighbors, sharedTokenPtrPtr, numNodes, start, fp);
 
                     lock->unlock();
+                    break;
+
+                case TERMINATE:
+                    sysTime = std::chrono::duration_cast<std::chrono::microseconds>(now - start).count();
+                    fprintf(fp, "%d received TERMINATE from %d at %lld\n", myID, terminateMessage->senderID, sysTime);
+                    fflush(fp);
+                    finishedProcessesCount++;
                     break;
 
                 default:
@@ -198,10 +243,12 @@ void run(int numNodes, int mutualExclusionCounts, int initialTokenNode, float al
     std::vector<std::map<int, RequestArrayNode> > reqArray(numNodes);
     std::vector<Token **> sharedTokenPtrPtr(numNodes, NULL);
     std::vector<Token *> sharedTokenPtr(numNodes, NULL);
+    std::vector<std::atomic<int> > finishedProcessesCount(numNodes);
 
     for (int i = 0; i < numNodes; i++)
     {
         sharedTokenPtrPtr[i] = &sharedTokenPtr[i];
+        finishedProcessesCount[i] = ATOMIC_VAR_INIT(0);
 
         for (int &nbr : topology[i])
         {
@@ -230,7 +277,7 @@ void run(int numNodes, int mutualExclusionCounts, int initialTokenNode, float al
     {
         workerReceivers[i] = std::thread(receiveMessage, i, startPort + i,
                                          std::ref(inCS[i]), std::ref(tokenHere[i]), std::ref(logicalClock[i]), std::ref(reqArray[i]),
-                                         std::ref(topology[i]), sharedTokenPtrPtr[i], numNodes,
+                                         std::ref(finishedProcessesCount[i]), std::ref(topology[i]), sharedTokenPtrPtr[i], numNodes,
                                          ref(start), fp, &locks[i]);
     }
 
@@ -244,19 +291,20 @@ void run(int numNodes, int mutualExclusionCounts, int initialTokenNode, float al
     {
         workerSenders[i] = std::thread(working, i,
                                        std::ref(inCS[i]), std::ref(tokenHere[i]), std::ref(logicalClock[i]), std::ref(reqArray[i]),
-                                       std::ref(topology[i]), sharedTokenPtrPtr[i], numNodes,
+                                       std::ref(topology[i]), sharedTokenPtrPtr[i], numNodes, std::ref(finishedProcessesCount[i]),
                                        mutualExclusionCounts, alpha, beta, ref(start), fp, &locks[i]);
     }
 
     for (int i = 0; i < numNodes; i++)
     {
         workerSenders[i].join();
-    }
-
-    for (int i = 0; i < numNodes; i++)
-    {
         workerReceivers[i].join();
     }
+
+    float averageMessagesExchanged = totalReceivedMessages / (numNodes * totalReceivedMessages * 1.0);
+    float averageResponseTime = totalResponseTime / (1000.0 * numNodes * mutualExclusionCounts);
+    std::cout << "\n\nAnalysis:\n\tTotal Messages Exchanged:  " << totalReceivedMessages << "\n\tAverage Messages Exchanged Per CS request: " << averageMessagesExchanged << std::endl;
+    std::cout << "\n\tAverage Response Time per CS request: " << averageResponseTime << " milliseconds" << std::endl;
 }
 
 int main(int argc, char *argv[])
