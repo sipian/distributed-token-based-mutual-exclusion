@@ -21,8 +21,8 @@ void transmitToken(const int myID, int &tokenHere, LLONG &logicalClock, std::map
 {
     if (*sharedTokenPtrPtr == NULL)
     {
-        printf("ERROR :: Node %d: transmitToken -> sharedTokenPtrPtr points to NULL\n", myID);
-        exit(EXIT_FAILURE);
+        printf("WARN :: Node %d: transmitToken -> sharedTokenPtrPtr points to NULL\n", myID);
+        return;
     }
 
     // Compute the minimum val of the processes owning a pending request then find the oldest and send it the token.
