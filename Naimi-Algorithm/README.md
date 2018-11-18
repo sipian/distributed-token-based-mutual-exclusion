@@ -10,5 +10,5 @@ g++ -std=c++14 -pthread naimi_sockets.cpp -o naimi_sock
 ./naimi_sock [PATH_TO_INPUT_FILE] [STARTING PORT NUMBER]
 
 ex:
-./naimi_sock ../test/Naimi/inp-params.txt 9000
+./naimi_sock ../tests/Naimi/inp-params.txt 9000
 ```
