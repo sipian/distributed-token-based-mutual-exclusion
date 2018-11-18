@@ -22,30 +22,43 @@
 #include <unistd.h>
 using namespace std;
 
+
+// Typedef for chrono based time module
 typedef chrono::time_point<chrono::system_clock> Time;
 
+// enum for different kinds of messages
 enum messageType{
   PRIVILEGE,
   REQUEST,
   TERMINATE
 };
 
+// Definition of message structure used in send and receive process
 typedef struct Message{
   enum messageType type;
   int senderID;
   int reqProcess;
 } Message1;
 
-// Useful meta variables
+// Useful constants for Naimi's Algorithm
 #define MAX_NODES 30
 #define FALSE 0
 #define TRUE 1
 #define NIL_PROCESS -1
 
+// Define starting port number
 int startPort;
+
+// atomic variables used for analysis of the algorithm
 std::atomic<int> totalReceivedMessages = ATOMIC_VAR_INIT(0);
 std::atomic<long long int> totalResponseTime = ATOMIC_VAR_INIT(0);
 
+// Creates a socket which is used for receiving the messages from other processes
+// Arguments:
+// @myID : Identifier of the node
+// @myPort : Port number on which socket is created
+//
+// Return Value: the socket identifier
 int createReceiveSocket(int myID, int myPort){
   printf("INFO :: Node %d: createReceiveSocket -> Creating Socket %hu\n", myID, myPort);
   struct sockaddr_in server;
@@ -89,12 +102,26 @@ int createReceiveSocket(int myID, int myPort){
 }
 
 
+// Helper function to send message to a given node
+// Arguments:
+// @myID : Identifier of the node
+// @dstID : Identifier of the destination node during the send procedure
+// @type : type of the message to be sent
+// @needsReqProcess : Identifier of the request process when a request message
+//                    is sent(Specific to Naimi's algorithm)
+//
+// Return Value: Boolean whether the message is sent or not
 bool sendMessage(int myID, int dstID, messageType type, int needsReqProcess)
 {
+    // Sender and receiver should not be the same
     assert(myID != dstID);
+
+    // Creating the message to be sent
     Message1 message;
     message.senderID = myID;
     message.type = type;
+    // In case a request message is sent, the identifier of the original requested
+    // process is also needed, which is never -1
     if(needsReqProcess != -1)
       message.reqProcess = needsReqProcess;
 
@@ -134,6 +161,22 @@ bool sendMessage(int myID, int dstID, messageType type, int needsReqProcess)
 
 
 // Barrier function called before entering CS
+// Arguments:
+// @myID : Identifier of the node
+// @request_cs :    Node-specific variable denoting whether it is requesting for
+//                  cs or not
+// @next_process :  Node-specific variable denoting the next process to which
+//                  the token is sent after completing our CS
+// @father :        Node-specific variable denoting the father of the node to
+//                  which request messages are sent
+// @token_present : Node-specific variable denoting whether token is present to
+//                  enter CS
+// @outfile :       File pointer to the file where the log messages are written
+// @m_sendrec :     mutex lock used to guard variables between work() and
+//                  receive() threads
+// @start :         Reference point to measure time used in logging
+//
+// Return Value: Void
 bool wantToEnter(int myID, int &request_cs, int &next_process, int &father, int &token_present, FILE *outfile, pthread_mutex_t *m_sendrec, Time &start){
   pthread_mutex_lock(m_sendrec);
   request_cs = TRUE;
@@ -161,6 +204,22 @@ bool wantToEnter(int myID, int &request_cs, int &next_process, int &father, int 
 }
 
 // Function called after entering CS
+// Arguments:
+// @myID : Identifier of the node
+// @request_cs :    Node-specific variable denoting whether it is requesting for
+//                  cs or not
+// @next_process :  Node-specific variable denoting the next process to which
+//                  the token is sent after completing our CS
+// @father :        Node-specific variable denoting the father of the node to
+//                  which request messages are sent
+// @token_present : Node-specific variable denoting whether token is present to
+//                  enter CS
+// @outfile :       File pointer to the file where the log messages are written
+// @m_sendrec :     mutex lock used to guard variables between work() and
+//                  receive() threads
+// @start :         Reference point to measure time used in logging
+//
+// Return Value: Void
 bool wantToLeave(int myID, int &request_cs, int &next_process, int &father, int &token_present, FILE *outfile, pthread_mutex_t *m_sendrec, Time &start){
   pthread_mutex_lock(m_sendrec);
 
@@ -180,6 +239,33 @@ bool wantToLeave(int myID, int &request_cs, int &next_process, int &father, int 
 
 }
 
+// The working thread which tries to simulate the critical section algorithm
+// using Naimi's algorithm
+//
+// Arguments:
+// @myID :          Identifier of the node
+// @father :        Node-specific variable denoting the father of the node to
+//                  which request messages are sent
+// @next_process :  Node-specific variable denoting the next process to which
+//                  the token is sent after completing our CS
+// @request_cs :    Node-specific variable denoting whether it is requesting for
+//                  cs or not
+// @token_present : Node-specific variable denoting whether token is present to
+//                  enter CS
+// @noOfNodes :     Total number of nodes present in the node setup
+// @mutexCounts :   Number of times this thread enters the CS
+//
+// @finishedProcessesCount :   atomic variable which is used in the termination
+//                             phase
+// @lambda1 :       variable which is used for simulating time spent before
+//                  entering CS
+// @lambda2 :       variable which is used for simulating time spent inside CS
+// @start :         Reference point to measure time used in logging
+//
+// @outfile :       File pointer to the file where the log messages are written
+// @m_sendrec :     mutex lock used to guard variables between work() and
+//                  receive() threads
+// Return Value: Void
 void work(int myID, int &father, int &next_process, int &request_cs, int &token_present, int noOfNodes, int mutexCounts,
           atomic<int> &finishedProcessesCount, double lambda1, double lambda2, Time &start, FILE *outfile, pthread_mutex_t *m_sendrec){
   std::default_random_engine generator1;
@@ -258,6 +344,30 @@ void work(int myID, int &father, int &next_process, int &request_cs, int &token_
   fflush(outfile);
 }
 
+// The receive thread which tries to receive the messages directed to this node
+//
+// Arguments:
+// @myID :          Identifier of the node
+// @myPort :        Port number on which the receive socket is created
+// @father :        Node-specific variable denoting the father of the node to
+//                  which request messages are sent
+// @next_process :  Node-specific variable denoting the next process to which
+//                  the token is sent after completing our CS
+// @request_cs :    Node-specific variable denoting whether it is requesting for
+//                  cs or not
+// @token_present : Node-specific variable denoting whether token is present to
+//                  enter CS
+// @finishedProcessesCount :   atomic variable which is used in the termination
+//                             phase
+// @lambda1 :       variable which is used for simulating time spent before
+//                  entering CS
+// @lambda2 :       variable which is used for simulating time spent inside CS
+// @start :         Reference point to measure time used in logging
+//
+// @outfile :       File pointer to the file where the log messages are written
+// @m_sendrec :     mutex lock used to guard variables between work() and
+//                  receive() threads
+// Return Value: Void
 void receive(int myID, int myPort, int noOfNodes, int &father, int &next_process, int &request_cs, int &token_present,
              atomic<int> &finishedProcessesCount, Time &start, FILE *outfile, pthread_mutex_t *m_sendrec){
 
@@ -351,6 +461,17 @@ void receive(int myID, int myPort, int noOfNodes, int &father, int &next_process
   fflush(outfile);
 }
 
+// Function which spawn's n number of work() and receive() processes simulating
+// a n-node distributed setup
+//
+// Arguments:
+// @noOfNodes :     Number of nodes used in the distributed setting
+// @mutualExclusionCounts : Number of times CS is accessed by every node
+// @initialTokenNode : Node identifier which initially holds the token
+// @alpha :         lambda value used to generate random local computation times
+// @beta :          lambda value used to generate random CS execution times
+//
+// Return Value: Void
 void run(int noOfNodes, int mutualExclusionCounts, int initialTokenNode, double alpha, double beta)
 {
     fclose(fopen("output.txt", "w")); // remove file contents
@@ -404,6 +525,9 @@ void run(int noOfNodes, int mutualExclusionCounts, int initialTokenNode, double 
         workerSenders[i].join();
         workerReceivers[i].join();
     }
+
+    // Gathering the results with respect to average number of messages and
+    // response times to enter CS
     float averageMessagesExchanged = totalReceivedMessages / (noOfNodes*1.0);
     float averageResponseTime = totalResponseTime / (1000.0 * noOfNodes * mutualExclusionCounts);
 
@@ -422,6 +546,8 @@ int main(int argc, char *argv[])
         cout << "\033[1;31mMissing input file path in arguments\033[0m\n";
         exit(EXIT_FAILURE);
     }
+
+    // Taking the file as input from command line
     ifstream fin(argv[1]);
 
     if (!fin)
@@ -450,6 +576,8 @@ int main(int argc, char *argv[])
 
     fin >> noOfNodes >> mutualExclusionCounts >> initialTokenNode >> alpha >> beta;
     fin.close();
+
+    // Simulate Naimi's algorithm
     run(noOfNodes, mutualExclusionCounts, initialTokenNode, alpha, beta);
 
     return 0;
