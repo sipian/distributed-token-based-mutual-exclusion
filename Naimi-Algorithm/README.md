@@ -8,4 +8,7 @@ g++ -std=c++14 -pthread naimi_sockets.cpp -o naimi_sock
 - To run `./naimi_sock`, use the following command
 ```
 ./naimi_sock [PATH_TO_INPUT_FILE] [STARTING PORT NUMBER]
+
+ex:
+./naimi_sock ../test/Naimi/inp-params.txt 9000
 ```
