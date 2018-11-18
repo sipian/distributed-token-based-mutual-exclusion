@@ -293,7 +293,7 @@ void work(int myID, int &father, int &next_process, int &request_cs, int &token_
       // Barrier function before entering CS
       requestCSTime = chrono::system_clock::now();
       wantToEnter(myID,request_cs,next_process,father, token_present, outfile,m_sendrec,start);
-      totalResponseTime += totalResponseTime += chrono::duration_cast<chrono::microseconds>(chrono::system_clock::now() - requestCSTime).count();;
+      totalResponseTime += chrono::duration_cast<chrono::microseconds>(chrono::system_clock::now() - requestCSTime).count();;
 
       sysTime = chrono::duration_cast<chrono::microseconds>(chrono::system_clock::now() - start).count();
       fprintf(outfile,"p%d enters CS at %lld\n",myID,sysTime);
@@ -528,8 +528,8 @@ void run(int noOfNodes, int mutualExclusionCounts, int initialTokenNode, double 
 
     // Gathering the results with respect to average number of messages and
     // response times to enter CS
-    float averageMessagesExchanged = totalReceivedMessages / (noOfNodes*1.0);
-    float averageResponseTime = totalResponseTime / (1000.0 * noOfNodes * mutualExclusionCounts);
+    float averageMessagesExchanged = totalReceivedMessages / (noOfNodes*1.0*mutualExclusionCounts);
+    double averageResponseTime = totalResponseTime / (1000.0 * noOfNodes * mutualExclusionCounts);
 
     cout << "\n\nAnalysis:\n\tTotal Messages Exchanged:  " << totalReceivedMessages << "\n\tAverage Messages Exchanged: " << averageMessagesExchanged << endl;
     cout <<"\n\tAverage Response Time: " << averageResponseTime << " milliseconds" << endl;
