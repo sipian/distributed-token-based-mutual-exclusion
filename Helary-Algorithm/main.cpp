@@ -301,7 +301,7 @@ void run(int numNodes, int mutualExclusionCounts, int initialTokenNode, float al
         workerReceivers[i].join();
     }
 
-    float averageMessagesExchanged = totalReceivedMessages / (numNodes * totalReceivedMessages * 1.0);
+    float averageMessagesExchanged = totalReceivedMessages / (numNodes * mutualExclusionCounts * 1.0);
     float averageResponseTime = totalResponseTime / (1000.0 * numNodes * mutualExclusionCounts);
     std::cout << "\n\nAnalysis:\n\tTotal Messages Exchanged:  " << totalReceivedMessages << "\n\tAverage Messages Exchanged Per CS request: " << averageMessagesExchanged << std::endl;
     std::cout << "\n\tAverage Response Time per CS request: " << averageResponseTime << " milliseconds" << std::endl;

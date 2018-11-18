@@ -28,11 +28,20 @@ enum messageType
 typedef struct RequestMessage
 {
     enum messageType type;
-    int senderID;
-    int reqOriginId;
-    LLONG reqTime;
-    char alreadySeen[MAX_LENGTH]; // process-identifiers delimited by comma
+    int senderID;       // Process ID which sent the request
+    int reqOriginId;    // Process ID original request creator
+
+    LLONG reqTime;      // Lamport's logical clock value of the requesting
+                        // process at the request creation time.
+
+    char alreadySeen[MAX_LENGTH];
+    /* process-IDs delimited by comma. Every process whose ID is in
+        alreadySeen has received or is about to receive the request.
+        This is used to reduce the message complexity.
+    */
+
 } RequestMessage;
+
 
 /**
  * @brief Token message shared between nodes
@@ -41,9 +50,15 @@ typedef struct RequestMessage
 typedef struct Token
 {
     enum messageType type;
-    int senderID;
-    int elecID;                // destination ID
-    LLONG lud[MAX_NODES]; // array of nodes logical clock
+    int senderID;               // Process ID which sent the token.
+
+    int elecID;                // Process ID the token's final addressee.
+
+    LLONG lud[MAX_NODES];
+    /*
+        Array whose ith index stores the value that Process_i logical-clock
+        had when Process_i gave the token to another process.
+    */
 } Token;
 
 typedef struct TerminateMessage
