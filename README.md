@@ -1,2 +1,5 @@
-# Distributed-mutual-exclusion-algorithms
-- This Repo contains the implementation of two distributed mutual-exclusion algorithms: Naimi's Algorithm and Helary's algorithm
+# Distributed Token Based Mutual Exclusion Algorithms
+- This repo contains the implementation of two distributed token-based mutual-exclusion algorithms
+  - [A Log (N) Distributed Mutual Exclusion Algorithm Based on Path Reversal](https://dl.acm.org/citation.cfm?id=234302) by Mohamed Naimi, Michel Trehel & André Arnold
+
+  - [A Distributed Algorithm for Mutual Exclusion in an Arbitrary Network](https://academic.oup.com/comjnl/article/31/4/289/380471) by J. M. Helary, N. Plouzeau & M. Raynal 
